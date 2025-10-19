@@ -21,3 +21,5 @@ yarn-error.log
 reference/
 tasks/
 
+# Database
+/database/database.sqlite
