@@ -42,7 +42,7 @@
 <body>
     <div class="container">
         <h1>Laravel {{ app()->version() }}</h1>
-        <p>SPA Importer для Bitrix24</p>
+        <p>SPA Importer for Bitrix24</p>
     </div>
 </body>
 
