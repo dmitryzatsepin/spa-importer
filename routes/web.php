@@ -2,10 +2,15 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TestBitrix24Controller;
+use App\Http\Controllers\AuthController;
 
 Route::get('/', function () {
     return view('welcome');
 });
+
+// OAuth маршруты для установки приложения Битрикс24
+Route::get('/install', [AuthController::class, 'install'])->name('auth.install');
+Route::get('/auth/callback', [AuthController::class, 'callback'])->name('auth.callback');
 
 // Тестовые маршруты для Bitrix24 API Service
 Route::prefix('test-bitrix24')->group(function () {
