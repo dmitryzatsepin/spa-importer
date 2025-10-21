@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Portal;
 use App\Services\Bitrix24\Bitrix24APIService;
 use App\Services\Bitrix24\Bitrix24BatchRequest;
 use App\Services\Bitrix24\Exceptions\Bitrix24APIException;
+use App\Services\Bitrix24\Exceptions\TokenRefreshException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -156,6 +158,85 @@ class TestBitrix24Controller extends Controller
     }
 
     /**
+     * Тест автоматического обновления токена
+     * Использует портал из БД и автоматически обновляет истекший токен
+     * Пример: GET /test-bitrix24/token-refresh?portal_id=1
+     */
+    public function testTokenRefresh(Request $request): JsonResponse
+    {
+        $portalId = $request->input('portal_id');
+
+        if (!$portalId) {
+            return response()->json([
+                'error' => 'Требуется параметр portal_id'
+            ], 400);
+        }
+
+        $portal = Portal::find($portalId);
+
+        if (!$portal) {
+            return response()->json([
+                'error' => 'Портал не найден'
+            ], 404);
+        }
+
+        try {
+            // Создаем сервис с моделью Portal - токен обновится автоматически
+            $service = new Bitrix24APIService(
+                $portal->domain,
+                $portal->access_token,
+                30,
+                5,
+                $portal
+            );
+
+            // Информация о токене ДО запроса
+            $tokenBefore = [
+                'expires_at' => $portal->expires_at->toDateTimeString(),
+                'is_expired' => $portal->isTokenExpired(),
+                'needs_refresh' => $portal->needsTokenRefresh(),
+            ];
+
+            // Выполняем запрос - если токен истек, он обновится автоматически
+            $result = $service->call('app.info');
+
+            // Обновляем данные портала из БД
+            $portal->refresh();
+
+            // Информация о токене ПОСЛЕ запроса
+            $tokenAfter = [
+                'expires_at' => $portal->expires_at->toDateTimeString(),
+                'is_expired' => $portal->isTokenExpired(),
+                'needs_refresh' => $portal->needsTokenRefresh(),
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Запрос выполнен успешно',
+                'token_before' => $tokenBefore,
+                'token_after' => $tokenAfter,
+                'token_was_refreshed' => $tokenBefore['expires_at'] !== $tokenAfter['expires_at'],
+                'api_result' => $result
+            ]);
+
+        } catch (TokenRefreshException $e) {
+            return response()->json([
+                'success' => false,
+                'error_type' => 'TokenRefreshException',
+                'error' => $e->getMessage(),
+                'context' => $e->getContext()
+            ], 500);
+        } catch (Bitrix24APIException $e) {
+            return response()->json([
+                'success' => false,
+                'error_type' => 'Bitrix24APIException',
+                'error' => $e->getMessage(),
+                'context' => $e->getContext()
+            ], 500);
+        }
+    }
+
+    /**
      * Главная страница с инструкциями
      */
     public function index(): JsonResponse
@@ -183,8 +264,13 @@ class TestBitrix24Controller extends Controller
                     'description' => 'Тест с невалидным токеном',
                     'method' => 'GET'
                 ],
+                [
+                    'url' => '/test-bitrix24/token-refresh?portal_id=1',
+                    'description' => 'Тест автоматического обновления токена (использует портал из БД)',
+                    'method' => 'GET'
+                ],
             ],
-            'note' => 'Замените YOUR_DOMAIN и YOUR_TOKEN на ваши реальные значения'
+            'note' => 'Замените YOUR_DOMAIN, YOUR_TOKEN и portal_id на ваши реальные значения'
         ]);
     }
 }

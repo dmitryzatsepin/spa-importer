@@ -2,7 +2,9 @@
 
 namespace App\Services\Bitrix24;
 
+use App\Models\Portal;
 use App\Services\Bitrix24\Exceptions\Bitrix24APIException;
+use App\Services\Bitrix24\Exceptions\TokenRefreshException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Client\RequestException;
@@ -13,17 +15,20 @@ class Bitrix24APIService
     protected string $accessToken;
     protected int $timeout;
     protected int $connectTimeout;
+    protected ?Portal $portal;
 
     public function __construct(
         string $domain,
         string $accessToken,
         int $timeout = 30,
-        int $connectTimeout = 5
+        int $connectTimeout = 5,
+        ?Portal $portal = null
     ) {
         $this->domain = rtrim($domain, '/');
         $this->accessToken = $accessToken;
         $this->timeout = $timeout;
         $this->connectTimeout = $connectTimeout;
+        $this->portal = $portal;
     }
 
     /**
@@ -33,9 +38,12 @@ class Bitrix24APIService
      * @param array $params Параметры запроса
      * @return array Результат запроса
      * @throws Bitrix24APIException
+     * @throws TokenRefreshException
      */
     public function call(string $method, array $params = []): array
     {
+        $this->ensureValidToken();
+
         $url = $this->buildUrl($method);
 
         $params['auth'] = $this->accessToken;
@@ -130,9 +138,12 @@ class Bitrix24APIService
      * @param Bitrix24BatchRequest $batchRequest
      * @return array Результаты выполнения команд
      * @throws Bitrix24APIException
+     * @throws TokenRefreshException
      */
     public function callBatch(Bitrix24BatchRequest $batchRequest): array
     {
+        $this->ensureValidToken();
+
         if (!$batchRequest->hasCommands()) {
             throw new Bitrix24APIException('Пакетный запрос не содержит команд');
         }
@@ -264,6 +275,137 @@ class Bitrix24APIService
     {
         $this->accessToken = $accessToken;
         return $this;
+    }
+
+    /**
+     * Убедиться, что токен действителен, обновить если необходимо
+     * 
+     * @throws TokenRefreshException
+     */
+    protected function ensureValidToken(): void
+    {
+        if (!$this->portal) {
+            return;
+        }
+
+        if (!$this->portal->needsTokenRefresh()) {
+            return;
+        }
+
+        $this->refreshToken();
+    }
+
+    /**
+     * Обновить токен доступа через API Битрикс24
+     * 
+     * @throws TokenRefreshException
+     */
+    protected function refreshToken(): void
+    {
+        if (!$this->portal) {
+            throw new TokenRefreshException('Невозможно обновить токен: портал не установлен');
+        }
+
+        $clientId = config('services.bitrix24.client_id');
+        $clientSecret = config('services.bitrix24.client_secret');
+
+        if (!$clientId || !$clientSecret) {
+            throw new TokenRefreshException(
+                'Не настроены client_id или client_secret для Битрикс24',
+                ['portal_id' => $this->portal->id]
+            );
+        }
+
+        try {
+            $response = Http::timeout($this->timeout)
+                ->connectTimeout($this->connectTimeout)
+                ->asForm()
+                ->post('https://oauth.bitrix.info/oauth/token/', [
+                    'grant_type' => 'refresh_token',
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret,
+                    'refresh_token' => $this->portal->refresh_token,
+                ]);
+
+            $data = $response->json();
+
+            if (!$response->successful() || isset($data['error'])) {
+                throw new TokenRefreshException(
+                    sprintf(
+                        'Ошибка обновления токена: %s',
+                        $data['error_description'] ?? $data['error'] ?? 'Неизвестная ошибка'
+                    ),
+                    [
+                        'portal_id' => $this->portal->id,
+                        'domain' => $this->portal->domain,
+                        'status' => $response->status(),
+                        'error' => $data['error'] ?? null,
+                        'error_description' => $data['error_description'] ?? null,
+                    ]
+                );
+            }
+
+            if (!isset($data['access_token']) || !isset($data['refresh_token'])) {
+                throw new TokenRefreshException(
+                    'Некорректный ответ при обновлении токена: отсутствуют необходимые поля',
+                    [
+                        'portal_id' => $this->portal->id,
+                        'response_data' => $data,
+                    ]
+                );
+            }
+
+            // Обновляем токены в базе данных
+            $this->portal->updateTokens(
+                $data['access_token'],
+                $data['refresh_token'],
+                $data['expires_in'] ?? 3600
+            );
+
+            // Обновляем токен в текущем экземпляре сервиса
+            $this->accessToken = $data['access_token'];
+
+            Log::info('Токен успешно обновлен', [
+                'portal_id' => $this->portal->id,
+                'domain' => $this->portal->domain,
+                'expires_at' => $this->portal->expires_at->toDateTimeString(),
+            ]);
+
+        } catch (RequestException $e) {
+            Log::error('Ошибка HTTP при обновлении токена', [
+                'portal_id' => $this->portal->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw new TokenRefreshException(
+                sprintf('Ошибка HTTP при обновлении токена: %s', $e->getMessage()),
+                [
+                    'portal_id' => $this->portal->id,
+                    'exception' => get_class($e),
+                ],
+                0,
+                $e
+            );
+        } catch (\Exception $e) {
+            if ($e instanceof TokenRefreshException) {
+                throw $e;
+            }
+
+            Log::error('Неожиданная ошибка при обновлении токена', [
+                'portal_id' => $this->portal->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw new TokenRefreshException(
+                sprintf('Неожиданная ошибка при обновлении токена: %s', $e->getMessage()),
+                [
+                    'portal_id' => $this->portal->id,
+                    'exception' => get_class($e),
+                ],
+                0,
+                $e
+            );
+        }
     }
 }
 

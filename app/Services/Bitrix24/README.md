@@ -10,6 +10,8 @@
 
 ### Создание экземпляра сервиса
 
+#### Простой вариант (без автоматического обновления токенов)
+
 ```php
 use App\Services\Bitrix24\Bitrix24APIService;
 
@@ -19,6 +21,26 @@ $service = new Bitrix24APIService(
     timeout: 30,           // опционально, по умолчанию 30 секунд
     connectTimeout: 5      // опционально, по умолчанию 5 секунд
 );
+```
+
+#### С автоматическим обновлением токенов (рекомендуется)
+
+```php
+use App\Services\Bitrix24\Bitrix24APIService;
+use App\Models\Portal;
+
+$portal = Portal::find($portalId);
+
+$service = new Bitrix24APIService(
+    domain: $portal->domain,
+    accessToken: $portal->access_token,
+    timeout: 30,
+    connectTimeout: 5,
+    portal: $portal        // передайте модель Portal для автообновления токенов
+);
+
+// Токены будут автоматически обновляться при необходимости!
+$result = $service->call('crm.deal.list');
 ```
 
 ### Одиночный запрос
@@ -91,19 +113,88 @@ try {
 }
 ```
 
+## Автоматическое обновление токенов
+
+Сервис поддерживает автоматическое обновление токенов доступа. Токены Битрикс24 имеют ограниченный срок жизни (обычно 1 час).
+
+### Как это работает
+
+1. Передайте модель `Portal` в конструктор `Bitrix24APIService`
+2. Перед каждым API-запросом сервис проверяет срок действия токена
+3. Если токен истек или истекает в ближайшие 60 секунд, он автоматически обновляется
+4. Новые токены сохраняются в БД
+5. Исходный API-запрос выполняется с обновленным токеном
+
+### Настройка
+
+Убедитесь, что в `config/services.php` настроены credentials:
+
+```php
+'bitrix24' => [
+    'client_id' => env('BITRIX24_CLIENT_ID'),
+    'client_secret' => env('BITRIX24_CLIENT_SECRET'),
+],
+```
+
+В `.env` файле:
+
+```env
+BITRIX24_CLIENT_ID=your_client_id
+BITRIX24_CLIENT_SECRET=your_client_secret
+```
+
+### Пример использования
+
+```php
+use App\Services\Bitrix24\Bitrix24APIService;
+use App\Services\Bitrix24\Exceptions\TokenRefreshException;
+use App\Models\Portal;
+
+$portal = Portal::find($portalId);
+
+try {
+    $service = new Bitrix24APIService(
+        $portal->domain,
+        $portal->access_token,
+        30,
+        5,
+        $portal  // Важно: передаем модель для автообновления
+    );
+    
+    // Токен обновится автоматически, если необходимо
+    $result = $service->call('crm.deal.list');
+    
+} catch (TokenRefreshException $e) {
+    // Ошибка обновления токена (например, невалидный refresh_token)
+    \Log::error('Token refresh failed', [
+        'error' => $e->getMessage(),
+        'context' => $e->getContext()
+    ]);
+    
+    // Можно попросить пользователя переустановить приложение
+    return redirect()->route('auth.install');
+}
+```
+
 ### Обработка ошибок
 
 ```php
 use App\Services\Bitrix24\Exceptions\Bitrix24APIException;
+use App\Services\Bitrix24\Exceptions\TokenRefreshException;
 
 try {
     $result = $service->call('some.method', $params);
     
-} catch (Bitrix24APIException $e) {
-    // Получить сообщение об ошибке
-    $errorMessage = $e->getMessage();
+} catch (TokenRefreshException $e) {
+    // Ошибка обновления токена
+    // Обычно означает, что refresh_token невалиден
+    // или приложение было удалено из портала
+    echo "Не удалось обновить токен: " . $e->getMessage();
+    echo "Контекст: " . print_r($e->getContext(), true);
     
-    // Получить дополнительный контекст ошибки
+} catch (Bitrix24APIException $e) {
+    // Обычная ошибка API
+    $errorMessage = $e->getMessage();
     $context = $e->getContext();
     
     // В контексте может быть:
@@ -113,23 +204,10 @@ try {
     // - params: параметры запроса
     // - status: HTTP статус
     
-    // Логирование
     \Log::error('Bitrix24 API Error', [
         'message' => $errorMessage,
         'context' => $context
     ]);
-    
-    // Обработка специфичных ошибок
-    if (isset($context['error'])) {
-        switch ($context['error']) {
-            case 'expired_token':
-                // Обновить токен
-                break;
-            case 'insufficient_scope':
-                // Запросить дополнительные права
-                break;
-        }
-    }
 }
 ```
 
@@ -167,6 +245,8 @@ try {
 
 ## Тестирование
 
+### Тестовые маршруты
+
 Для тестирования сервиса доступны специальные маршруты:
 
 ```http
@@ -175,7 +255,24 @@ GET /test-bitrix24/single?domain=your-portal.bitrix24.ru&token=YOUR_TOKEN
 GET /test-bitrix24/batch?domain=your-portal.bitrix24.ru&token=YOUR_TOKEN
 GET /test-bitrix24/error?domain=your-portal.bitrix24.ru&token=YOUR_TOKEN
 GET /test-bitrix24/invalid-token?domain=your-portal.bitrix24.ru
+GET /test-bitrix24/token-refresh?portal_id=1
 ```
+
+### Консольный скрипт для тестирования обновления токенов
+
+```bash
+# Обычный запуск (проверка состояния токена)
+php test-token-refresh.php
+
+# Принудительно истечь токен и протестировать обновление
+php test-token-refresh.php --expire
+```
+
+Скрипт покажет:
+
+- Текущее состояние токена (истек ли он)
+- Был ли токен обновлен автоматически
+- Результат API-запроса
 
 ## Примеры использования в контроллерах
 
@@ -184,34 +281,49 @@ namespace App\Http\Controllers;
 
 use App\Services\Bitrix24\Bitrix24APIService;
 use App\Services\Bitrix24\Bitrix24BatchRequest;
+use App\Services\Bitrix24\Exceptions\TokenRefreshException;
 use App\Models\Portal;
 
 class DealController extends Controller
 {
     public function index(Portal $portal)
     {
-        $service = new Bitrix24APIService(
-            $portal->domain,
-            $portal->access_token
-        );
-        
-        $result = $service->call('crm.deal.list', [
-            'filter' => ['STAGE_ID' => 'NEW'],
-            'select' => ['ID', 'TITLE', 'OPPORTUNITY'],
-            'order' => ['DATE_CREATE' => 'DESC']
-        ]);
-        
-        return view('deals.index', [
-            'deals' => $result['result'],
-            'total' => $result['total']
-        ]);
+        try {
+            // С автоматическим обновлением токенов
+            $service = new Bitrix24APIService(
+                $portal->domain,
+                $portal->access_token,
+                30,
+                5,
+                $portal  // передаем модель
+            );
+            
+            $result = $service->call('crm.deal.list', [
+                'filter' => ['STAGE_ID' => 'NEW'],
+                'select' => ['ID', 'TITLE', 'OPPORTUNITY'],
+                'order' => ['DATE_CREATE' => 'DESC']
+            ]);
+            
+            return view('deals.index', [
+                'deals' => $result['result'],
+                'total' => $result['total']
+            ]);
+            
+        } catch (TokenRefreshException $e) {
+            // Токен не удалось обновить - попросим переустановить
+            return redirect()->route('auth.install')
+                ->with('error', 'Необходимо переустановить приложение');
+        }
     }
     
     public function batchUpdate(Portal $portal, array $dealIds)
     {
         $service = new Bitrix24APIService(
             $portal->domain,
-            $portal->access_token
+            $portal->access_token,
+            30,
+            5,
+            $portal
         );
         
         $batch = new Bitrix24BatchRequest();
@@ -230,6 +342,59 @@ class DealController extends Controller
         $result = $service->callBatch($batch);
         
         return response()->json($result);
+    }
+}
+```
+
+## Использование в фоновых задачах (Jobs)
+
+Механизм автоматического обновления токенов особенно полезен в фоновых задачах:
+
+```php
+namespace App\Jobs;
+
+use App\Models\Portal;
+use App\Services\Bitrix24\Bitrix24APIService;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+
+class ImportDealsJob implements ShouldQueue
+{
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    protected Portal $portal;
+
+    public function __construct(Portal $portal)
+    {
+        $this->portal = $portal;
+    }
+
+    public function handle()
+    {
+        // Токены обновятся автоматически, даже если задача
+        // выполняется через несколько часов после создания
+        $service = new Bitrix24APIService(
+            $this->portal->domain,
+            $this->portal->access_token,
+            30,
+            5,
+            $this->portal
+        );
+
+        $start = 0;
+        do {
+            $result = $service->call('crm.deal.list', [
+                'start' => $start,
+                'select' => ['ID', 'TITLE', 'OPPORTUNITY']
+            ]);
+
+            // Обработка сделок...
+            
+            $start += 50;
+        } while ($result['next'] ?? false);
     }
 }
 ```

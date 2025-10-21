@@ -28,6 +28,30 @@ class Portal extends Model
     }
 
     /**
+     * Проверяет, требуется ли обновление токена
+     * (токен истек или истекает в ближайшие 60 секунд)
+     */
+    public function needsTokenRefresh(int $bufferSeconds = 60): bool
+    {
+        if (!$this->expires_at) {
+            return true;
+        }
+
+        return $this->expires_at->subSeconds($bufferSeconds)->isPast();
+    }
+
+    /**
+     * Обновляет токены доступа
+     */
+    public function updateTokens(string $accessToken, string $refreshToken, int $expiresIn): void
+    {
+        $this->access_token = $accessToken;
+        $this->refresh_token = $refreshToken;
+        $this->expires_at = Carbon::now()->addSeconds($expiresIn);
+        $this->save();
+    }
+
+    /**
      * Находит портал по member_id
      */
     public static function findByMemberId(string $memberId): ?self

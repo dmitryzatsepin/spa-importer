@@ -36,6 +36,7 @@ BITRIX24_CLIENT_SECRET=your_client_secret_here
 ## Проверка в базе данных
 
 После успешной установки в таблице `portals` должна появиться запись с полями:
+
 - `member_id` - уникальный идентификатор портала
 - `domain` - домен портала (например, `your-portal.bitrix24.ru`)
 - `access_token` - токен доступа
@@ -45,6 +46,6 @@ BITRIX24_CLIENT_SECRET=your_client_secret_here
 ## Маршруты
 
 Приложение использует следующие маршруты:
+
 - `GET /install` - первоначальная установка приложения
 - `GET /auth/callback` - обработка callback от Битрикс24
-
