@@ -12,26 +12,35 @@ export function ImportProgress({ jobId, onComplete }: ImportProgressProps) {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        loadStatus();
-        const interval = setInterval(loadStatus, 2000);
+        let interval: NodeJS.Timeout | null = null;
 
-        return () => clearInterval(interval);
-    }, [jobId]);
+        const loadStatus = async () => {
+            try {
+                const data = await api.getImportStatus(jobId);
+                setStatus(data);
+                setError(null);
 
-    const loadStatus = async () => {
-        try {
-            const data = await api.getImportStatus(jobId);
-            setStatus(data);
-            setError(null);
-
-            if (data.status === 'completed' || data.status === 'failed') {
-                // Автоматически остановим опрос
+                if (data.status === 'completed' || data.status === 'failed') {
+                    if (interval) {
+                        clearInterval(interval);
+                        interval = null;
+                    }
+                }
+            } catch (err) {
+                setError('Ошибка получения статуса импорта');
+                console.error(err);
             }
-        } catch (err) {
-            setError('Ошибка получения статуса импорта');
-            console.error(err);
-        }
-    };
+        };
+
+        loadStatus();
+        interval = setInterval(loadStatus, 2000);
+
+        return () => {
+            if (interval) {
+                clearInterval(interval);
+            }
+        };
+    }, [jobId]);
 
     if (!status) {
         return <div className="loading">Загрузка статуса...</div>;
