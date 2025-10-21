@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StartImportRequest;
+use App\Jobs\ProcessImportJob;
 use App\Models\ImportJob;
 use App\Models\Portal;
 use App\Services\Bitrix24\Bitrix24APIService;
@@ -146,8 +147,8 @@ class ImportController extends Controller
                 'processed_rows' => 0,
             ]);
 
-            // TODO: Поставить в очередь ProcessImportJob
-            // dispatch(new ProcessImportJob($importJob->id));
+            // Поставить в очередь ProcessImportJob
+            dispatch(new ProcessImportJob($importJob->id));
 
             Log::info('Создана задача импорта', [
                 'job_id' => $importJob->id,
