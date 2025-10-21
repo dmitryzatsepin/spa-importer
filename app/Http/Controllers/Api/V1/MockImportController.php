@@ -141,4 +141,63 @@ class MockImportController extends Controller
             ],
         ]);
     }
+
+    public function history(Request $request): JsonResponse
+    {
+        $request->validate([
+            'portal_id' => ['required', 'integer'],
+        ]);
+
+        // Мок истории импортов
+        $mockJobs = [];
+        for ($i = 0; $i < 15; $i++) {
+            $statuses = ['pending', 'processing', 'completed', 'failed'];
+            $status = $statuses[array_rand($statuses)];
+            $totalRows = rand(50, 500);
+            $processedRows = in_array($status, ['completed', 'failed']) ? $totalRows : rand(0, $totalRows);
+            $hasErrors = $status === 'failed' || ($status === 'completed' && rand(0, 1));
+
+            $mockJobs[] = [
+                'job_id' => 100 + $i,
+                'status' => $status,
+                'original_filename' => sprintf('import_data_%d.csv', $i + 1),
+                'total_rows' => $totalRows,
+                'processed_rows' => $processedRows,
+                'progress_percentage' => round(($processedRows / $totalRows) * 100, 2),
+                'has_errors' => $hasErrors,
+                'error_count' => $hasErrors ? rand(1, 10) : 0,
+                'created_at' => now()->subDays(rand(1, 30))->toISOString(),
+                'updated_at' => now()->subDays(rand(0, 15))->toISOString(),
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $mockJobs,
+            'pagination' => [
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => 20,
+                'total' => count($mockJobs),
+            ],
+        ]);
+    }
+
+    public function downloadErrorLog(int $jobId)
+    {
+        // Мок CSV с ошибками
+        $csvContent = "\xEF\xBB\xBF"; // BOM для UTF-8
+        $csvContent .= "Номер строки;Ошибка;Исходные данные\n";
+        $csvContent .= "5;Не заполнено обязательное поле 'TITLE';{\"TITLE\":\"\",\"ASSIGNED_BY_ID\":\"123\"}\n";
+        $csvContent .= "12;Некорректный формат даты;{\"TITLE\":\"Тест\",\"DATE\":\"invalid-date\"}\n";
+        $csvContent .= "18;Пользователь с ID 999 не найден;{\"TITLE\":\"Элемент\",\"ASSIGNED_BY_ID\":\"999\"}\n";
+
+        $filename = sprintf('error_log_%s_%s.csv', $jobId, date('Y-m-d_H-i-s'));
+
+        return response($csvContent, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+            'Content-Length' => strlen($csvContent),
+        ]);
+    }
 }

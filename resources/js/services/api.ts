@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { SmartProcess, SmartProcessField, FieldMapping, ImportSettings, ImportJobStatus } from '../types/api';
+import type { SmartProcess, SmartProcessField, FieldMapping, ImportSettings, ImportJobStatus, HistoryResponse } from '../types/api';
 
 const API_BASE = '/api/v1';
 
@@ -50,6 +50,20 @@ export const api = {
     async getImportStatus(jobId: number): Promise<ImportJobStatus> {
         const response = await axios.get(`${API_BASE}/import/${jobId}/status`);
         return response.data.data;
+    },
+
+    async getImportHistory(portalId: number): Promise<HistoryResponse> {
+        const response = await axios.get(`${API_BASE}/import/history`, {
+            params: { portal_id: portalId }
+        });
+        return {
+            data: response.data.data,
+            pagination: response.data.pagination
+        };
+    },
+
+    downloadErrorLog(jobId: number): void {
+        window.location.href = `${API_BASE}/import/${jobId}/error-log`;
     }
 };
 

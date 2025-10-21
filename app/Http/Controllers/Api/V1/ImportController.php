@@ -211,5 +211,116 @@ class ImportController extends Controller
             ], 404);
         }
     }
+
+    public function history(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'portal_id' => ['required', 'integer', 'exists:portals,id'],
+            ]);
+
+            $importJobs = ImportJob::where('portal_id', $request->portal_id)
+                ->orderBy('created_at', 'desc')
+                ->paginate(20);
+
+            return response()->json([
+                'success' => true,
+                'data' => $importJobs->map(fn($job) => [
+                    'job_id' => $job->id,
+                    'status' => $job->status,
+                    'original_filename' => $job->original_filename,
+                    'total_rows' => $job->total_rows,
+                    'processed_rows' => $job->processed_rows,
+                    'progress_percentage' => $job->getProgressPercentage(),
+                    'has_errors' => !empty($job->error_details),
+                    'error_count' => !empty($job->error_details) ? count($job->error_details) : 0,
+                    'created_at' => $job->created_at->toISOString(),
+                    'updated_at' => $job->updated_at->toISOString(),
+                ]),
+                'pagination' => [
+                    'current_page' => $importJobs->currentPage(),
+                    'last_page' => $importJobs->lastPage(),
+                    'per_page' => $importJobs->perPage(),
+                    'total' => $importJobs->total(),
+                ],
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Ошибка получения истории импортов', [
+                'message' => $e->getMessage(),
+                'portal_id' => $request->portal_id ?? null,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Не удалось получить историю импортов',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function downloadErrorLog(int $jobId)
+    {
+        try {
+            $importJob = ImportJob::findOrFail($jobId);
+
+            if (empty($importJob->error_details)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'У данной задачи нет ошибок',
+                ], 404);
+            }
+
+            $csvContent = $this->generateErrorCsv($importJob->error_details);
+            $filename = sprintf(
+                'error_log_%s_%s.csv',
+                $importJob->id,
+                date('Y-m-d_H-i-s')
+            );
+
+            return response($csvContent, 200, [
+                'Content-Type' => 'text/csv; charset=UTF-8',
+                'Content-Disposition' => sprintf('attachment; filename="%s"', $filename),
+                'Content-Length' => strlen($csvContent),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Ошибка скачивания лога ошибок', [
+                'message' => $e->getMessage(),
+                'job_id' => $jobId,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Не удалось скачать лог ошибок',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    private function generateErrorCsv(array $errorDetails): string
+    {
+        $handle = fopen('php://temp', 'r+');
+
+        // BOM для корректного отображения UTF-8 в Excel
+        fwrite($handle, "\xEF\xBB\xBF");
+
+        // Заголовки
+        fputcsv($handle, ['Номер строки', 'Ошибка', 'Исходные данные'], ';');
+
+        foreach ($errorDetails as $error) {
+            $rowNumber = $error['row'] ?? 'N/A';
+            $errorMessage = $error['error'] ?? 'Неизвестная ошибка';
+            $rowData = isset($error['data']) ? json_encode($error['data'], JSON_UNESCAPED_UNICODE) : '';
+
+            fputcsv($handle, [$rowNumber, $errorMessage, $rowData], ';');
+        }
+
+        rewind($handle);
+        $csvContent = stream_get_contents($handle);
+        fclose($handle);
+
+        return $csvContent;
+    }
 }
 
