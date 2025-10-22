@@ -1,0 +1,11 @@
+node_modules
+vendor
+public/build
+storage
+bootstrap/cache
+.phpunit.result.cache
+*.log
+*.lock
+package-lock.json
+composer.lock
+

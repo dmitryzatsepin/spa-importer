@@ -7,3 +7,4 @@ cd "$SCRIPT_DIR/../../.." || exit 1
 
 php scripts/manual-tests/api/test-import-api.php
 
+

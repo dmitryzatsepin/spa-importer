@@ -45,7 +45,10 @@
             "@php artisan key:generate --ansi",
             "@php -r \"file_exists('database/database.sqlite') || touch('database/database.sqlite');\"",
             "@php artisan migrate --graceful --ansi"
-        ]
+        ],
+        "lint": "pint --test",
+        "format": "pint",
+        "test": "phpunit"
     },
     "extra": {
         "laravel": {

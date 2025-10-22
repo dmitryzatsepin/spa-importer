@@ -1,0 +1,9 @@
+node_modules
+vendor
+public/build
+storage
+bootstrap/cache
+*.config.js
+*.config.ts
+vite.config.ts
+
