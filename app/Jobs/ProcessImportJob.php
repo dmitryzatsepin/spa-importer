@@ -109,41 +109,78 @@ class ProcessImportJob implements ShouldQueue
         $spreadsheet = $reader->load($filePath);
         $worksheet = $spreadsheet->getActiveSheet();
 
-        $rows = $worksheet->toArray();
+        // Получаем итератор для строк
+        $rowIterator = $worksheet->getRowIterator();
 
-        if (empty($rows)) {
+        // Читаем первую строку (заголовки)
+        $rowIterator->rewind();
+        if (!$rowIterator->valid()) {
             throw new \RuntimeException('Файл пуст');
         }
 
-        $headers = array_shift($rows);
-        $importJob->total_rows = count($rows);
+        $headerRow = $rowIterator->current();
+        $cellIterator = $headerRow->getCellIterator();
+        $cellIterator->setIterateOnlyExistingCells(false);
+
+        $headers = [];
+        foreach ($cellIterator as $cell) {
+            $headers[] = $cell->getValue();
+        }
+
+        // Подсчитываем total_rows (без загрузки всех данных в память)
+        $totalRows = $worksheet->getHighestRow() - 1; // -1 для заголовка
+        $importJob->total_rows = $totalRows;
         $importJob->save();
 
-        $this->processRows($rows, $headers, $importJob, $apiService);
+        // Переходим к следующей строке (пропускаем заголовки)
+        $rowIterator->next();
+
+        // Обрабатываем строки через итератор
+        $this->processRowsIterator($rowIterator, $headers, $importJob, $apiService);
+
+        // Освобождаем память
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
     }
 
     protected function processCsvFile(string $filePath, ImportJob $importJob, Bitrix24APIService $apiService): void
     {
-        $csv = new Csv();
-        $csv->setDelimiter($this->detectCsvDelimiter($filePath));
-        $csv->setInputEncoding($this->detectEncoding($filePath));
+        $delimiter = $this->detectCsvDelimiter($filePath);
+        $encoding = $this->detectEncoding($filePath);
 
-        $spreadsheet = $csv->load($filePath);
-        $worksheet = $spreadsheet->getActiveSheet();
-        $rows = $worksheet->toArray();
+        // Создаем SplFileObject для потокового чтения
+        $file = new \SplFileObject($filePath, 'r');
+        $file->setFlags(\SplFileObject::READ_CSV | \SplFileObject::SKIP_EMPTY | \SplFileObject::DROP_NEW_LINE);
+        $file->setCsvControl($delimiter);
 
-        if (empty($rows)) {
+        // Читаем заголовки
+        $file->rewind();
+        $headers = $file->current();
+
+        if (!$headers || empty($headers)) {
             throw new \RuntimeException('Файл пуст');
         }
 
-        $headers = array_shift($rows);
-        $importJob->total_rows = count($rows);
+        // Конвертируем заголовки из исходной кодировки в UTF-8
+        if ($encoding !== 'UTF-8') {
+            $headers = array_map(function ($header) use ($encoding) {
+                return mb_convert_encoding($header, 'UTF-8', $encoding);
+            }, $headers);
+        }
+
+        // Подсчитываем количество строк (без загрузки в память)
+        $totalRows = $this->countCsvRows($filePath) - 1; // -1 для заголовка
+        $importJob->total_rows = $totalRows;
         $importJob->save();
 
-        $this->processRows($rows, $headers, $importJob, $apiService);
+        // Переходим к первой строке данных
+        $file->next();
+
+        // Обрабатываем через итератор
+        $this->processCsvIterator($file, $headers, $encoding, $importJob, $apiService);
     }
 
-    protected function processRows(array $rows, array $headers, ImportJob $importJob, Bitrix24APIService $apiService): void
+    protected function processRowsIterator($rowIterator, array $headers, ImportJob $importJob, Bitrix24APIService $apiService): void
     {
         $entityTypeId = $importJob->settings['entity_type_id'] ?? null;
         if (!$entityTypeId) {
@@ -156,13 +193,24 @@ class ProcessImportJob implements ShouldQueue
         $batchRequest = new Bitrix24BatchRequest();
         $processedCount = 0;
         $errors = [];
+        $rowIndex = 0;
 
-        foreach ($rows as $rowIndex => $row) {
+        foreach ($rowIterator as $row) {
             try {
-                $fields = $this->transformRowToFields($row, $headers, $importJob->field_mappings);
+                // Преобразуем объекты Cell в массив значений
+                $cellIterator = $row->getCellIterator();
+                $cellIterator->setIterateOnlyExistingCells(false);
+
+                $rowData = [];
+                foreach ($cellIterator as $cell) {
+                    $rowData[] = $cell->getValue();
+                }
+
+                $fields = $this->transformRowToFields($rowData, $headers, $importJob->field_mappings);
 
                 if (empty($fields)) {
                     Log::warning('Пропущена пустая строка', ['row' => $rowIndex + 2]);
+                    $rowIndex++;
                     continue;
                 }
 
@@ -201,6 +249,8 @@ class ProcessImportJob implements ShouldQueue
                     'error' => $e->getMessage(),
                 ];
             }
+
+            $rowIndex++;
         }
 
         if ($batchRequest->hasCommands()) {
@@ -209,6 +259,113 @@ class ProcessImportJob implements ShouldQueue
         }
 
         $importJob->updateProgress($processedCount, !empty($errors) ? $errors : null);
+    }
+
+    protected function processCsvIterator(\SplFileObject $file, array $headers, string $encoding, ImportJob $importJob, Bitrix24APIService $apiService): void
+    {
+        $entityTypeId = $importJob->settings['entity_type_id'] ?? null;
+        if (!$entityTypeId) {
+            throw new \RuntimeException('entity_type_id не указан в настройках');
+        }
+
+        $this->batchSize = $importJob->settings['batch_size'] ?? 10;
+        $duplicateHandling = $importJob->settings['duplicate_handling'] ?? 'skip';
+
+        $batchRequest = new Bitrix24BatchRequest();
+        $processedCount = 0;
+        $errors = [];
+        $rowIndex = 0;
+
+        while (!$file->eof()) {
+            $row = $file->current();
+
+            // Пропускаем пустые строки или некорректные данные
+            if (!$row || (count($row) === 1 && ($row[0] === null || $row[0] === ''))) {
+                $file->next();
+                continue;
+            }
+
+            try {
+                // Конвертируем из исходной кодировки в UTF-8
+                if ($encoding !== 'UTF-8') {
+                    $row = array_map(function ($value) use ($encoding) {
+                        return $value !== null ? mb_convert_encoding($value, 'UTF-8', $encoding) : null;
+                    }, $row);
+                }
+
+                $fields = $this->transformRowToFields($row, $headers, $importJob->field_mappings);
+
+                if (empty($fields)) {
+                    Log::warning('Пропущена пустая строка', ['row' => $rowIndex + 2]);
+                    $file->next();
+                    $rowIndex++;
+                    continue;
+                }
+
+                if ($duplicateHandling !== 'skip' || !$this->isDuplicate($fields, $entityTypeId, $apiService, $importJob)) {
+                    $batchRequest->addCommand(
+                        "row_{$rowIndex}",
+                        'crm.item.add',
+                        [
+                            'entityTypeId' => $entityTypeId,
+                            'fields' => $fields,
+                        ]
+                    );
+                }
+
+                $processedCount++;
+
+                if ($batchRequest->count() >= $this->batchSize) {
+                    $batchErrors = $this->executeBatch($batchRequest, $apiService);
+                    $errors = array_merge($errors, $batchErrors);
+                    $batchRequest->clear();
+                }
+
+                if ($processedCount % $this->progressUpdateInterval === 0) {
+                    $importJob->updateProgress($processedCount, !empty($errors) ? $errors : null);
+                }
+
+            } catch (\Exception $e) {
+                Log::error('Ошибка обработки строки', [
+                    'job_id' => $importJob->id,
+                    'row' => $rowIndex + 2,
+                    'error' => $e->getMessage(),
+                ]);
+
+                $errors[] = [
+                    'row' => $rowIndex + 2,
+                    'error' => $e->getMessage(),
+                ];
+            }
+
+            $file->next();
+            $rowIndex++;
+        }
+
+        if ($batchRequest->hasCommands()) {
+            $batchErrors = $this->executeBatch($batchRequest, $apiService);
+            $errors = array_merge($errors, $batchErrors);
+        }
+
+        $importJob->updateProgress($processedCount, !empty($errors) ? $errors : null);
+    }
+
+    protected function countCsvRows(string $filePath): int
+    {
+        $file = new \SplFileObject($filePath, 'r');
+        $file->setFlags(\SplFileObject::READ_CSV | \SplFileObject::SKIP_EMPTY | \SplFileObject::DROP_NEW_LINE);
+
+        $count = 0;
+        while (!$file->eof()) {
+            $row = $file->current();
+            // Считаем только непустые строки
+            if ($row && !(count($row) === 1 && ($row[0] === null || $row[0] === ''))) {
+                $count++;
+            }
+            $file->next();
+        }
+
+        return $count;
     }
 
     protected function transformRowToFields(array $row, array $headers, array $fieldMappings): array
