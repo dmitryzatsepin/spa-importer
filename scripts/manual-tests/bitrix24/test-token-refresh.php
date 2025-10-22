@@ -7,7 +7,7 @@
  * php test-token-refresh.php
  */
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../../../vendor/autoload.php';
 
 use App\Models\Portal;
 use App\Services\Bitrix24\Bitrix24APIService;
@@ -16,7 +16,7 @@ use App\Services\Bitrix24\Exceptions\Bitrix24APIException;
 use Illuminate\Support\Facades\Log;
 
 // Загрузка Laravel
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once __DIR__ . '/../../../bootstrap/app.php';
 $app->make('Illuminate\Contracts\Console\Kernel')->bootstrap();
 
 echo "=== Тест механизма автоматического обновления токенов ===\n\n";

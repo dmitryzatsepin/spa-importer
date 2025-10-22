@@ -10,10 +10,10 @@
  * php quick-test-bitrix24.php portal.bitrix24.ru your_oauth_token  (OAuth токен)
  */
 
-require __DIR__ . '/vendor/autoload.php';
+require __DIR__ . '/../../../vendor/autoload.php';
 
 // Загрузка приложения Laravel
-$app = require_once __DIR__ . '/bootstrap/app.php';
+$app = require_once __DIR__ . '/../../../bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use App\Services\Bitrix24\Bitrix24APIService;

@@ -39,5 +39,8 @@ echo "Домен: $1"
 echo "Токен: $2"
 echo ""
 
-php quick-test-bitrix24.php "$1" "$2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/../../.." || exit 1
+
+php scripts/manual-tests/bitrix24/test-bitrix24-api.php "$1" "$2"
 

@@ -1,0 +1,81 @@
+════════════════════════════════════════════════════════════════
+  СПИСОК ФАЙЛОВ ДЛЯ УДАЛЕНИЯ ИЗ КОРНЯ spa-importer/
+════════════════════════════════════════════════════════════════
+
+Следующие файлы были скопированы в scripts/manual-tests/
+и теперь могут быть удалены из корневой директории:
+
+┌─────────────────────────────────────────────────────────────┐
+│ PHP тестовые скрипты (7 файлов)                             │
+└─────────────────────────────────────────────────────────────┘
+
+  ✓ quick-test-bitrix24.php
+      → scripts/manual-tests/bitrix24/test-bitrix24-api.php
+
+  ✓ test-token-refresh.php
+      → scripts/manual-tests/bitrix24/test-token-refresh.php
+
+  ✓ test-api-switch.php
+      → scripts/manual-tests/api/test-api-switch.php
+
+  ✓ test-import-api.php
+      → scripts/manual-tests/api/test-import-api.php
+
+  ✓ test-frontend-api.php
+      → scripts/manual-tests/frontend/test-frontend-api.php
+
+  ✓ test-import-job.php
+      → scripts/manual-tests/jobs/test-import-job.php
+
+  ✓ show-tables.php
+      → scripts/manual-tests/utils/show-tables.php
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ Bash скрипты (3 файла)                                      │
+└─────────────────────────────────────────────────────────────┘
+
+  ✓ test-import-api-full.sh
+      → scripts/manual-tests/api/test-import-api-full.sh
+
+  ✓ test-local.sh
+      → scripts/manual-tests/bitrix24/test-local.sh
+
+  ✓ start-server.sh
+      → scripts/server/start-server.sh
+
+
+════════════════════════════════════════════════════════════════
+  КОМАНДА ДЛЯ УДАЛЕНИЯ (выполнить из spa-importer/)
+════════════════════════════════════════════════════════════════
+
+rm -f quick-test-bitrix24.php \
+      test-token-refresh.php \
+      test-api-switch.php \
+      test-import-api.php \
+      test-frontend-api.php \
+      test-import-job.php \
+      show-tables.php \
+      test-import-api-full.sh \
+      test-local.sh \
+      start-server.sh
+
+
+════════════════════════════════════════════════════════════════
+  ПРОВЕРКА ПЕРЕД УДАЛЕНИЕМ
+════════════════════════════════════════════════════════════════
+
+1. Убедитесь что все скрипты в scripts/manual-tests/ работают:
+   cd spa-importer
+   ./scripts/manual-tests/utils/show-tables.sh
+
+2. Проверьте документацию:
+   cat scripts/manual-tests/README.md
+
+3. Только после этого удаляйте оригинальные файлы!
+
+
+════════════════════════════════════════════════════════════════
+  ИТОГО: 10 файлов готовы к удалению
+════════════════════════════════════════════════════════════════
+

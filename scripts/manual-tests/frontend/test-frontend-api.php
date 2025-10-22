@@ -55,7 +55,7 @@ echo "\n";
 // Тест 3: Проверка портала в базе
 echo "3. Проверка портала в базе:\n";
 try {
-    $pdo = new PDO('sqlite:database/database.sqlite');
+    $pdo = new PDO('sqlite:' . __DIR__ . '/../../../database/database.sqlite');
     $stmt = $pdo->query('SELECT id, domain, member_id FROM portals LIMIT 1');
     $portal = $stmt->fetch(PDO::FETCH_ASSOC);
 
