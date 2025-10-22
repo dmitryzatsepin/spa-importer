@@ -216,8 +216,9 @@ class ProcessImportJob implements ShouldQueue
         $fields = [];
 
         foreach ($fieldMappings as $mapping) {
-            $sourceColumn = $mapping['source_column'] ?? null;
-            $targetField = $mapping['target_field'] ?? null;
+            // Новый формат: source/target, fallback: source_column/target_field
+            $sourceColumn = $mapping['source'] ?? $mapping['source_column'] ?? null;
+            $targetField = $mapping['target'] ?? $mapping['target_field'] ?? null;
             $transform = $mapping['transform'] ?? null;
 
             if (!$sourceColumn || !$targetField) {
@@ -397,7 +398,8 @@ class ProcessImportJob implements ShouldQueue
 
     protected function isDuplicate(array $fields, int $entityTypeId, Bitrix24APIService $apiService, ImportJob $importJob): bool
     {
-        $duplicateField = $importJob->settings['duplicate_check_field'] ?? null;
+        // Новый формат: duplicate_field, fallback: duplicate_check_field
+        $duplicateField = $importJob->settings['duplicate_field'] ?? $importJob->settings['duplicate_check_field'] ?? null;
 
         if (!$duplicateField || !isset($fields[$duplicateField])) {
             return false;

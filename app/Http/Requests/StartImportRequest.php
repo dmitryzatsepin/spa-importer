@@ -18,11 +18,14 @@ class StartImportRequest extends FormRequest
             'portal_id' => ['required', 'integer', 'exists:portals,id'],
             'entity_type_id' => ['required', 'integer'],
             'field_mappings' => ['required', 'array'],
-            'field_mappings.*.source' => ['required', 'string'],
-            'field_mappings.*.target' => ['required', 'string'],
+            'field_mappings.*.source' => ['nullable', 'string'],
+            'field_mappings.*.target' => ['nullable', 'string'],
+            'field_mappings.*.source_column' => ['nullable', 'string'],
+            'field_mappings.*.target_field' => ['nullable', 'string'],
             'settings' => ['nullable', 'array'],
             'settings.duplicate_handling' => ['nullable', 'string', 'in:skip,update,create_new'],
             'settings.duplicate_field' => ['nullable', 'string'],
+            'settings.duplicate_check_field' => ['nullable', 'string'],
             'settings.batch_size' => ['nullable', 'integer', 'min:1', 'max:50'],
         ];
     }
