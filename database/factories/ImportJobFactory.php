@@ -70,3 +70,4 @@ class ImportJobFactory extends Factory
         ]);
     }
 }
+

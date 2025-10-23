@@ -135,7 +135,9 @@ class MockImportController extends Controller
                 'total_rows' => $totalRows,
                 'processed_rows' => $processedRows,
                 'progress_percentage' => round($progressPercentage, 1),
-                'error_details' => $status === 'failed' ? 'Тестовая ошибка импорта' : null,
+                'error_details' => $status === 'failed'
+                    ? [['row' => 5, 'error' => 'Тестовая ошибка', 'data' => ['example' => true]]]
+                    : null,
                 'created_at' => now()->subMinutes(rand(1, 30))->toISOString(),
                 'updated_at' => now()->toISOString(),
             ],
