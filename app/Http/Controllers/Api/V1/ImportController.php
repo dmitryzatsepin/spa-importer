@@ -223,20 +223,22 @@ class ImportController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->paginate(20);
 
+            $items = $importJobs->getCollection()->map(fn($job) => [
+                'job_id' => $job->id,
+                'status' => $job->status,
+                'original_filename' => $job->original_filename,
+                'total_rows' => $job->total_rows,
+                'processed_rows' => $job->processed_rows,
+                'progress_percentage' => $job->getProgressPercentage(),
+                'has_errors' => !empty($job->error_details),
+                'error_count' => !empty($job->error_details) ? count($job->error_details) : 0,
+                'created_at' => $job->created_at->toISOString(),
+                'updated_at' => $job->updated_at->toISOString(),
+            ])->values();
+
             return response()->json([
                 'success' => true,
-                'data' => $importJobs->map(fn($job) => [
-                    'job_id' => $job->id,
-                    'status' => $job->status,
-                    'original_filename' => $job->original_filename,
-                    'total_rows' => $job->total_rows,
-                    'processed_rows' => $job->processed_rows,
-                    'progress_percentage' => $job->getProgressPercentage(),
-                    'has_errors' => !empty($job->error_details),
-                    'error_count' => !empty($job->error_details) ? count($job->error_details) : 0,
-                    'created_at' => $job->created_at->toISOString(),
-                    'updated_at' => $job->updated_at->toISOString(),
-                ]),
+                'data' => $items,
                 'pagination' => [
                     'current_page' => $importJobs->currentPage(),
                     'last_page' => $importJobs->lastPage(),
@@ -245,6 +247,12 @@ class ImportController extends Controller
                 ],
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ошибка валидации',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
             Log::error('Ошибка получения истории импортов', [
                 'message' => $e->getMessage(),
