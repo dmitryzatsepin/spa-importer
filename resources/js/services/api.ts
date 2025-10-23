@@ -4,6 +4,9 @@ import type { SmartProcess, SmartProcessField, FieldMapping, ImportSettings, Imp
 // Глобальная переменная для хранения конфигурации
 let appConfig: AppConfig = {};
 
+// Проверка окружения для логирования
+const isProd = process.env.NODE_ENV === 'production';
+
 // Функция для инициализации конфигурации
 export const initApiConfig = (config: AppConfig): void => {
     appConfig = config;
@@ -22,14 +25,14 @@ const createApiInstance = (): AxiosInstance => {
     // Request interceptor для логирования запросов
     instance.interceptors.request.use(
         (config) => {
-            console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
+            if (!isProd) console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
                 params: config.params,
                 data: config.data,
             });
             return config;
         },
         (error) => {
-            console.error('[API Request Error]', error);
+            if (!isProd) console.error('[API Request Error]', error);
             return Promise.reject(error);
         }
     );
@@ -37,7 +40,7 @@ const createApiInstance = (): AxiosInstance => {
     // Response interceptor для обработки ответов и ошибок
     instance.interceptors.response.use(
         (response: AxiosResponse) => {
-            console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+            if (!isProd) console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
                 status: response.status,
                 data: response.data,
             });
@@ -53,42 +56,42 @@ const createApiInstance = (): AxiosInstance => {
                 data: error.response?.data,
             };
 
-            console.error('[API Error]', errorInfo);
+            if (!isProd) console.error('[API Error]', errorInfo);
 
             // Централизованная обработка различных типов ошибок
             if (error.response) {
                 // Сервер ответил с кодом ошибки
                 switch (error.response.status) {
                     case 401:
-                        console.error('[API] Неавторизованный доступ. Требуется повторная авторизация.');
+                        if (!isProd) console.error('[API] Неавторизованный доступ. Требуется повторная авторизация.');
                         // Здесь можно добавить логику перенаправления на страницу входа
                         break;
                     case 403:
-                        console.error('[API] Доступ запрещен. Недостаточно прав.');
+                        if (!isProd) console.error('[API] Доступ запрещен. Недостаточно прав.');
                         break;
                     case 404:
-                        console.error('[API] Ресурс не найден.');
+                        if (!isProd) console.error('[API] Ресурс не найден.');
                         break;
                     case 422:
-                        console.error('[API] Ошибка валидации данных:', error.response.data);
+                        if (!isProd) console.error('[API] Ошибка валидации данных:', error.response.data);
                         break;
                     case 500:
-                        console.error('[API] Внутренняя ошибка сервера.');
+                        if (!isProd) console.error('[API] Внутренняя ошибка сервера.');
                         break;
                     case 502:
                     case 503:
                     case 504:
-                        console.error('[API] Сервер временно недоступен.');
+                        if (!isProd) console.error('[API] Сервер временно недоступен.');
                         break;
                     default:
-                        console.error(`[API] Неизвестная ошибка сервера: ${error.response.status}`);
+                        if (!isProd) console.error(`[API] Неизвестная ошибка сервера: ${error.response.status}`);
                 }
             } else if (error.request) {
                 // Запрос был отправлен, но ответ не получен
-                console.error('[API] Сетевая ошибка. Сервер не отвечает.');
+                if (!isProd) console.error('[API] Сетевая ошибка. Сервер не отвечает.');
             } else {
                 // Ошибка при настройке запроса
-                console.error('[API] Ошибка конфигурации запроса:', error.message);
+                if (!isProd) console.error('[API] Ошибка конфигурации запроса:', error.message);
             }
 
             return Promise.reject(error);
