@@ -89,8 +89,23 @@ class AuthController extends Controller
                 'domain' => $domain
             ]);
 
+            // Сохраняем данные в сессию
+            session([
+                'portal_id' => $portal->id,
+                'domain' => $domain,
+                'member_id' => $memberId,
+            ]);
+
+            // Устанавливаем HttpOnly cookie с API-ключом, если он задан в env
+            $apiKey = env('API_KEY');
+            $response = redirect('/')->with('success', 'Приложение успешно установлено!');
+            if ($apiKey) {
+                $secure = config('app.env') === 'production';
+                $response->withCookie(cookie('api_key', $apiKey, 60 * 24 * 7, null, null, $secure, true, false, 'Lax'));
+            }
+
             // Перенаправляем на главную страницу приложения
-            return redirect('/')->with('success', 'Приложение успешно установлено!');
+            return $response;
 
         } catch (\Exception $e) {
             Log::error('Bitrix24 OAuth error', [

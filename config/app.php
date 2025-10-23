@@ -35,7 +35,7 @@ return [
     | false - используются ImportController (реальное API)
     |
     */
-    'api_use_mock' => env('API_USE_MOCK', true),
+    'api_use_mock' => env('API_USE_MOCK', false),
 
 ];
 

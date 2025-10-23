@@ -24,13 +24,13 @@ export default function App({ config }: AppProps) {
     const [jobId, setJobId] = useState<number | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    const portalId = config.portal_id || 1;
+    const portalId = config.portal_id;
 
     const handleProcessSelect = async (process: SmartProcess) => {
         try {
             setError(null);
             setSelectedProcess(process);
-            const fields = await api.getSmartProcessFields(process.id, portalId);
+            const fields = await api.getSmartProcessFields(process.id, portalId as number);
             setProcessFields(fields);
             setCurrentStep('upload-file');
         } catch (err) {
@@ -50,7 +50,7 @@ export default function App({ config }: AppProps) {
 
         try {
             setError(null);
-            const result = await api.startImport(uploadedFile, portalId, selectedProcess.id, mappings);
+            const result = await api.startImport(uploadedFile, portalId as number, selectedProcess.id, mappings);
             setJobId(result.job_id);
             setCurrentStep('import-progress');
         } catch (err) {
@@ -101,28 +101,33 @@ export default function App({ config }: AppProps) {
             )}
 
             <div className="app-content">
+                {!portalId && (
+                    <div className="alert alert-error">
+                        Не указан portal_id. Обновите страницу установки или авторизуйтесь заново.
+                    </div>
+                )}
                 {currentView === 'history' ? (
                     <HistoryPage
-                        portalId={portalId}
+                        portalId={portalId as number}
                         onBack={() => setCurrentView('import')}
                     />
                 ) : (
                     <>
-                        {currentStep === 'select-process' && (
+                        {currentStep === 'select-process' && portalId && (
                             <SmartProcessSelector
                                 portalId={portalId}
                                 onSelect={handleProcessSelect}
                             />
                         )}
 
-                        {currentStep === 'upload-file' && selectedProcess && (
+                        {currentStep === 'upload-file' && selectedProcess && portalId && (
                             <FileUploader
                                 onUpload={handleFileUpload}
                                 onBack={() => setCurrentStep('select-process')}
                             />
                         )}
 
-                        {currentStep === 'map-fields' && (
+                        {currentStep === 'map-fields' && portalId && (
                             <FieldMapper
                                 fileColumns={fileColumns}
                                 processFields={processFields}
@@ -131,7 +136,7 @@ export default function App({ config }: AppProps) {
                             />
                         )}
 
-                        {currentStep === 'import-progress' && jobId && (
+                        {currentStep === 'import-progress' && jobId && portalId && (
                             <ImportProgress
                                 jobId={jobId}
                                 onComplete={handleReset}

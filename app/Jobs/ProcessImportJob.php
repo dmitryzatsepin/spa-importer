@@ -61,6 +61,17 @@ class ProcessImportJob implements ShouldQueue
 
             $importJob->markAsCompleted();
 
+            // Удаляем загруженный файл после успешной обработки
+            try {
+                Storage::delete($importJob->stored_filepath);
+            } catch (\Throwable $cleanupEx) {
+                Log::warning('Не удалось удалить файл импорта после завершения', [
+                    'job_id' => $importJob->id,
+                    'path' => $importJob->stored_filepath,
+                    'error' => $cleanupEx->getMessage(),
+                ]);
+            }
+
             Log::info('Импорт успешно завершен', [
                 'job_id' => $importJob->id,
                 'processed_rows' => $importJob->processed_rows,
@@ -82,6 +93,17 @@ class ProcessImportJob implements ShouldQueue
                     ],
                 ],
             ]);
+
+            // Пытаемся удалить файл даже при ошибке, чтобы не копить файлы
+            try {
+                Storage::delete($importJob->stored_filepath);
+            } catch (\Throwable $cleanupEx) {
+                Log::warning('Не удалось удалить файл импорта после ошибки', [
+                    'job_id' => $importJob->id,
+                    'path' => $importJob->stored_filepath,
+                    'error' => $cleanupEx->getMessage(),
+                ]);
+            }
         }
     }
 

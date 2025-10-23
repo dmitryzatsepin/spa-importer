@@ -22,12 +22,11 @@ if (config('app.env') !== 'production' || env('ENABLE_TEST_ROUTES', false)) {
 
 // Главный маршрут SPA - должен быть последним, чтобы не перекрывать другие маршруты
 Route::get('/{any?}', function () {
-    // В реальном приложении здесь нужно получать данные из сессии или параметров установки
-    // Для примера передаем тестовые данные
+    // Берём контекст из сессии, а не из query
     return view('app', [
-        'member_id' => request()->query('member_id'),
-        'domain' => request()->query('domain'),
-        'portal_id' => request()->query('portal_id', 1), // ID из таблицы portals
+        'member_id' => session('member_id'),
+        'domain' => session('domain'),
+        'portal_id' => session('portal_id'),
     ]);
 })->where('any', '^(?!api).*$');
 
