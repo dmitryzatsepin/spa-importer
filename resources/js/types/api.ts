@@ -64,5 +64,6 @@ export interface AppConfig {
     member_id?: string;
     domain?: string;
     portal_id?: number;
+    api_base_url?: string;
 }
 

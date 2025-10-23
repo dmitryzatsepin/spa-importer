@@ -20,6 +20,7 @@
     'member_id' => $member_id ?? null,
     'domain' => $domain ?? null,
     'portal_id' => $portal_id ?? null,
+    'api_base_url' => '/api/v1',
 ]) !!}
     </script>
 </body>

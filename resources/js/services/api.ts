@@ -1,18 +1,129 @@
-import axios from 'axios';
-import type { SmartProcess, SmartProcessField, FieldMapping, ImportSettings, ImportJobStatus, HistoryResponse } from '../types/api';
+import axios, { AxiosInstance, AxiosError, AxiosResponse } from 'axios';
+import type { SmartProcess, SmartProcessField, FieldMapping, ImportSettings, ImportJobStatus, HistoryResponse, AppConfig } from '../types/api';
 
-const API_BASE = '/api/v1';
+// Глобальная переменная для хранения конфигурации
+let appConfig: AppConfig = {};
+
+// Функция для инициализации конфигурации
+export const initApiConfig = (config: AppConfig): void => {
+    appConfig = config;
+};
+
+// Создание axios instance с базовой конфигурацией
+const createApiInstance = (): AxiosInstance => {
+    const instance = axios.create({
+        baseURL: appConfig.api_base_url || '/api/v1',
+        timeout: 30000, // 30 секунд
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    // Request interceptor для логирования запросов
+    instance.interceptors.request.use(
+        (config) => {
+            console.log(`[API Request] ${config.method?.toUpperCase()} ${config.url}`, {
+                params: config.params,
+                data: config.data,
+            });
+            return config;
+        },
+        (error) => {
+            console.error('[API Request Error]', error);
+            return Promise.reject(error);
+        }
+    );
+
+    // Response interceptor для обработки ответов и ошибок
+    instance.interceptors.response.use(
+        (response: AxiosResponse) => {
+            console.log(`[API Response] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
+                status: response.status,
+                data: response.data,
+            });
+            return response;
+        },
+        (error: AxiosError) => {
+            const errorInfo = {
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                url: error.config?.url,
+                method: error.config?.method,
+                data: error.response?.data,
+            };
+
+            console.error('[API Error]', errorInfo);
+
+            // Централизованная обработка различных типов ошибок
+            if (error.response) {
+                // Сервер ответил с кодом ошибки
+                switch (error.response.status) {
+                    case 401:
+                        console.error('[API] Неавторизованный доступ. Требуется повторная авторизация.');
+                        // Здесь можно добавить логику перенаправления на страницу входа
+                        break;
+                    case 403:
+                        console.error('[API] Доступ запрещен. Недостаточно прав.');
+                        break;
+                    case 404:
+                        console.error('[API] Ресурс не найден.');
+                        break;
+                    case 422:
+                        console.error('[API] Ошибка валидации данных:', error.response.data);
+                        break;
+                    case 500:
+                        console.error('[API] Внутренняя ошибка сервера.');
+                        break;
+                    case 502:
+                    case 503:
+                    case 504:
+                        console.error('[API] Сервер временно недоступен.');
+                        break;
+                    default:
+                        console.error(`[API] Неизвестная ошибка сервера: ${error.response.status}`);
+                }
+            } else if (error.request) {
+                // Запрос был отправлен, но ответ не получен
+                console.error('[API] Сетевая ошибка. Сервер не отвечает.');
+            } else {
+                // Ошибка при настройке запроса
+                console.error('[API] Ошибка конфигурации запроса:', error.message);
+            }
+
+            return Promise.reject(error);
+        }
+    );
+
+    return instance;
+};
+
+// Получение экземпляра API
+let apiInstance: AxiosInstance | null = null;
+
+const getApiInstance = (): AxiosInstance => {
+    if (!apiInstance) {
+        apiInstance = createApiInstance();
+    }
+    return apiInstance;
+};
+
+// Обновление baseURL при изменении конфигурации
+export const updateApiBaseUrl = (baseUrl: string): void => {
+    appConfig.api_base_url = baseUrl;
+    apiInstance = createApiInstance(); // Пересоздаем instance с новым baseURL
+};
 
 export const api = {
     async getSmartProcesses(portalId: number): Promise<SmartProcess[]> {
-        const response = await axios.get(`${API_BASE}/smart-processes`, {
+        const response = await getApiInstance().get('/smart-processes', {
             params: { portal_id: portalId }
         });
         return response.data.data;
     },
 
     async getSmartProcessFields(entityTypeId: number, portalId: number): Promise<SmartProcessField[]> {
-        const response = await axios.get(`${API_BASE}/smart-processes/${entityTypeId}/fields`, {
+        const response = await getApiInstance().get(`/smart-processes/${entityTypeId}/fields`, {
             params: { portal_id: portalId }
         });
         return response.data.data;
@@ -41,19 +152,19 @@ export const api = {
             });
         }
 
-        const response = await axios.post(`${API_BASE}/import`, formData, {
+        const response = await getApiInstance().post('/import', formData, {
             headers: { 'Content-Type': 'multipart/form-data' }
         });
         return response.data.data;
     },
 
     async getImportStatus(jobId: number): Promise<ImportJobStatus> {
-        const response = await axios.get(`${API_BASE}/import/${jobId}/status`);
+        const response = await getApiInstance().get(`/import/${jobId}/status`);
         return response.data.data;
     },
 
     async getImportHistory(portalId: number): Promise<HistoryResponse> {
-        const response = await axios.get(`${API_BASE}/import/history`, {
+        const response = await getApiInstance().get('/import/history', {
             params: { portal_id: portalId }
         });
         return {
@@ -63,7 +174,7 @@ export const api = {
     },
 
     downloadErrorLog(jobId: number): void {
-        window.location.href = `${API_BASE}/import/${jobId}/error-log`;
+        const baseUrl = appConfig.api_base_url || '/api/v1';
+        window.location.href = `${baseUrl}/import/${jobId}/error-log`;
     }
 };
-
