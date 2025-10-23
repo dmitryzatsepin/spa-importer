@@ -76,9 +76,13 @@ class ProcessImportJob implements ShouldQueue
             ]);
 
             $importJob->markAsFailed([
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
+                [
+                    'error' => $e->getMessage(),
+                    'data' => [
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                    ],
+                ],
             ]);
         }
     }
@@ -593,8 +597,10 @@ class ProcessImportJob implements ShouldQueue
             foreach ($result['results'] as $commandKey => $commandResult) {
                 if ($commandResult['error']) {
                     $errors[] = [
-                        'command' => $commandKey,
                         'error' => $commandResult['error'],
+                        'data' => [
+                            'command' => $commandKey,
+                        ],
                     ];
 
                     Log::warning('Ошибка выполнения команды в батче', [
@@ -611,8 +617,11 @@ class ProcessImportJob implements ShouldQueue
             ]);
 
             $errors[] = [
-                'batch' => 'execution_failed',
                 'error' => $e->getMessage(),
+                'data' => [
+                    'batch' => 'execution_failed',
+                    'context' => $e->getContext(),
+                ],
             ];
         }
 

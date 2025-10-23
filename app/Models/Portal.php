@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
 
 class Portal extends Model
 {
+    use HasFactory;
     protected $fillable = [
         'member_id',
         'domain',

@@ -77,10 +77,23 @@ export function ImportProgress({ jobId, onComplete }: ImportProgressProps) {
                 </div>
             </div>
 
-            {status.error_details && (
+            {status.error_details && status.error_details.length > 0 && (
                 <div className="error-details">
-                    <h3>Детали ошибки:</h3>
-                    <pre>{status.error_details}</pre>
+                    <h3>Детали ошибок:</h3>
+                    <div className="error-list">
+                        {status.error_details.map((error, index) => (
+                            <div key={index} className="error-item">
+                                {error.row && <p><strong>Строка {error.row}:</strong></p>}
+                                <p className="error-message">{error.error}</p>
+                                {error.data && (
+                                    <details className="error-data">
+                                        <summary>Дополнительные данные</summary>
+                                        <pre>{JSON.stringify(error.data, null, 2)}</pre>
+                                    </details>
+                                )}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
 

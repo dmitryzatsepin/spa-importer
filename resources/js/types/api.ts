@@ -23,6 +23,12 @@ export interface ImportSettings {
     batch_size?: number;
 }
 
+export interface ErrorDetail {
+    row?: number;
+    error: string;
+    data?: any;
+}
+
 export interface ImportJobStatus {
     job_id: number;
     status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -30,7 +36,7 @@ export interface ImportJobStatus {
     total_rows: number;
     processed_rows: number;
     progress_percentage: number;
-    error_details: string | null;
+    error_details: ErrorDetail[] | null;
     created_at: string;
     updated_at: string;
 }
