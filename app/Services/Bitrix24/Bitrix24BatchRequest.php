@@ -2,7 +2,6 @@
 
 namespace App\Services\Bitrix24;
 
-use InvalidArgumentException;
 
 class Bitrix24BatchRequest
 {
