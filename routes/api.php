@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\V1\ImportController;
 use App\Http\Controllers\Api\V1\MockImportController;
 use Illuminate\Support\Facades\Route;
 
-Route::prefix('v1')->middleware(['api.key'])->group(function () {
+// В проде требуем API-ключ, локально можно тестировать без него
+$middlewares = app()->environment('production') ? ['api.key'] : [];
+Route::prefix('v1')->middleware($middlewares)->group(function () {
     // Динамический выбор контроллера на основе config('app.api_use_mock')
     Route::get('/smart-processes', function () {
         $controller = config('app.api_use_mock') ? MockImportController::class : ImportController::class;

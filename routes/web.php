@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\TestBitrix24Controller;
 use App\Http\Controllers\AuthController;
+use App\Models\Portal;
 
 // OAuth маршруты для установки приложения Битрикс24
 Route::get('/install', [AuthController::class, 'install'])->name('auth.install');
@@ -17,6 +18,29 @@ if (config('app.env') !== 'production' || env('ENABLE_TEST_ROUTES', false)) {
         Route::get('/error', [TestBitrix24Controller::class, 'testErrorHandling']);
         Route::get('/invalid-token', [TestBitrix24Controller::class, 'testInvalidToken']);
         Route::get('/token-refresh', [TestBitrix24Controller::class, 'testTokenRefresh']);
+    });
+
+    // Дев-маршрут для инициализации сессии/куки без реального OAuth
+    Route::get('/dev/init', function () {
+        $portal = Portal::first();
+        if (!$portal) {
+            $portal = Portal::factory()->create([
+                'domain' => 'local.bitrix24.ru',
+            ]);
+        }
+
+        session([
+            'portal_id' => $portal->id,
+            'domain' => $portal->domain,
+            'member_id' => $portal->member_id ?? 'local-member',
+        ]);
+
+        $response = redirect('/');
+        if ($apiKey = env('API_KEY')) {
+            $secure = false;
+            $response->withCookie(cookie('api_key', $apiKey, 60 * 24, null, null, $secure, true, false, 'Lax'));
+        }
+        return $response;
     });
 }
 
