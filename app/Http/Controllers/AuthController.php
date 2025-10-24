@@ -15,6 +15,12 @@ class AuthController extends Controller
      */
     public function install(Request $request)
     {
+        Log::info('Bitrix24 install request received', [
+            'method' => $request->method(),
+            'all_params' => $request->all(),
+            'headers' => $request->headers->all()
+        ]);
+
         // Валидация входящих параметров от Битрикс24
         $request->validate([
             'DOMAIN' => 'required|string',

@@ -6,7 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Models\Portal;
 
 // OAuth маршруты для установки приложения Битрикс24
-Route::get('/install', [AuthController::class, 'install'])->name('auth.install');
+Route::match(['get', 'post'], '/install', [AuthController::class, 'install'])->name('auth.install');
 Route::get('/auth/callback', [AuthController::class, 'callback'])->name('auth.callback');
 
 // Тестовые маршруты для Bitrix24 API Service (только в dev/staging или при ENABLE_TEST_ROUTES=true)
