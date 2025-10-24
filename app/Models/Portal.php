@@ -15,6 +15,8 @@ class Portal extends Model
         'access_token',
         'refresh_token',
         'expires_at',
+        'client_id',
+        'client_secret',
     ];
 
     protected $casts = [

@@ -18,16 +18,17 @@ class AuthController extends Controller
         // Валидация входящих параметров от Битрикс24
         $request->validate([
             'DOMAIN' => 'required|string',
-            'PROTOCOL' => 'required|in:0,1',
+            'PROTOCOL' => 'nullable|in:0,1',
             'LANG' => 'nullable|string',
             'APP_SID' => 'nullable|string',
+            'MEMBER_ID' => 'nullable|string',
         ]);
 
         $domain = $request->input('DOMAIN');
         $protocol = $request->input('PROTOCOL') == 1 ? 'https' : 'http';
 
         // Формируем URL для OAuth авторизации
-        $clientId = config('services.bitrix24.client_id');
+        $clientId = config('services.bitrix24.client_id') ?: env('BITRIX24_CLIENT_ID');
         $redirectUri = route('auth.callback');
 
         if (!$clientId) {
@@ -73,6 +74,10 @@ class AuthController extends Controller
             // Обмениваем код на токены доступа
             $tokens = $this->exchangeCodeForTokens($code, $domain);
 
+            // Получаем CLIENT_ID и CLIENT_SECRET для этого портала
+            $clientId = config('services.bitrix24.client_id') ?: env('BITRIX24_CLIENT_ID');
+            $clientSecret = config('services.bitrix24.client_secret') ?: env('BITRIX24_CLIENT_SECRET');
+
             // Сохраняем или обновляем информацию о портале
             $portal = Portal::updateOrCreate(
                 ['member_id' => $memberId],
@@ -81,6 +86,8 @@ class AuthController extends Controller
                     'access_token' => $tokens['access_token'],
                     'refresh_token' => $tokens['refresh_token'],
                     'expires_at' => Carbon::now()->addSeconds($tokens['expires_in']),
+                    'client_id' => $clientId,
+                    'client_secret' => $clientSecret,
                 ]
             );
 
@@ -126,8 +133,8 @@ class AuthController extends Controller
      */
     private function exchangeCodeForTokens(string $code, string $domain): array
     {
-        $clientId = config('services.bitrix24.client_id');
-        $clientSecret = config('services.bitrix24.client_secret');
+        $clientId = config('services.bitrix24.client_id') ?: env('BITRIX24_CLIENT_ID');
+        $clientSecret = config('services.bitrix24.client_secret') ?: env('BITRIX24_CLIENT_SECRET');
         $redirectUri = route('auth.callback');
 
         if (!$clientId || !$clientSecret) {
